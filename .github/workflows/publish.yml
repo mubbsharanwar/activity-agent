@@ -46,16 +46,27 @@ jobs:
             if [[ -n "${ids}" ]]; then
               while IFS= read -r id; do
                 [[ -z "${id}" ]] && continue
-                read -r state env_url < <(gh api "repos/${GITHUB_REPOSITORY}/deployments/${id}/statuses" --jq '.[0] | "\(.state) \(.environment_url // "")"')
-                if [[ "${state}" == "success" && -n "${env_url}" && "${env_url}" != "null" ]]; then
-                  echo "url=${env_url}" >> "$GITHUB_OUTPUT"
-                  {
-                    echo "### Deployed"
-                    echo
-                    echo "${env_url}"
-                  } >> "$GITHUB_STEP_SUMMARY"
-                  echo "Deployed: ${env_url}"
-                  exit 0
+                {
+                  read -r state
+                  read -r env_url
+                  read -r target_url
+                  read -r log_url
+                } < <(gh api "repos/${GITHUB_REPOSITORY}/deployments/${id}/statuses" --jq '.[0] | .state, (.environment_url // ""), (.target_url // ""), (.log_url // "")')
+                if [[ "${state}" == "success" ]]; then
+                  url=""
+                  for candidate in "${env_url}" "${target_url}" "${log_url}"; do
+                    [[ -z "${candidate}" || "${candidate}" == "null" ]] && continue
+                    [[ "${candidate}" == https://vercel.com/* ]] && continue
+                    [[ "${candidate}" == https://* ]] || continue
+                    url="${candidate}"
+                    break
+                  done
+                  if [[ -n "${url}" ]]; then
+                    echo "url=${url}" >> "$GITHUB_OUTPUT"
+                    echo "${url}" >> "$GITHUB_STEP_SUMMARY"
+                    echo "${url}"
+                    exit 0
+                  fi
                 fi
                 if [[ "${state}" == "failure" || "${state}" == "error" ]]; then
                   echo "Deployment ${id} reported ${state}."
