@@ -1,0 +1,71 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  deployments: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    outputs:
+      url: ${{ steps.url.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Commit and push
+        id: push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Publish site"
+            git push origin HEAD:main
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Vercel URL
+        id: url
+        env:
+          SHA: ${{ steps.push.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 600))
+
+          while (( SECONDS < deadline )); do
+            ids=$(gh api "repos/${GITHUB_REPOSITORY}/deployments?sha=${SHA}" --jq '.[].id')
+            if [[ -n "${ids}" ]]; then
+              while IFS= read -r id; do
+                [[ -z "${id}" ]] && continue
+                read -r state env_url < <(gh api "repos/${GITHUB_REPOSITORY}/deployments/${id}/statuses" --jq '.[0] | "\(.state) \(.environment_url // "")"')
+                if [[ "${state}" == "success" && -n "${env_url}" && "${env_url}" != "null" ]]; then
+                  echo "url=${env_url}" >> "$GITHUB_OUTPUT"
+                  {
+                    echo "### Deployed"
+                    echo
+                    echo "${env_url}"
+                  } >> "$GITHUB_STEP_SUMMARY"
+                  echo "Deployed: ${env_url}"
+                  exit 0
+                fi
+                if [[ "${state}" == "failure" || "${state}" == "error" ]]; then
+                  echo "Deployment ${id} reported ${state}."
+                  exit 1
+                fi
+              done <<< "${ids}"
+            fi
+            echo "Waiting for Vercel deployment of ${SHA}..."
+            sleep 15
+          done
+
+          echo "No successful deployment URL within 10 minutes."
+          exit 1
