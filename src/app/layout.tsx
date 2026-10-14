@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Activity",
   description: "Send a prompt or a file and read the model reply.",
+  icons: null,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
