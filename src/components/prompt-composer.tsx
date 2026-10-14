@@ -73,7 +73,7 @@ export function PromptComposer() {
 
   function selectActivity(activity: ActivitySuggestion) {
     void sendMessage(
-      { text: `Selected activity: ${activity.title}\n${activity.summary}` },
+      { text: `Selected activity: ${activity.title}\nType: ${activity.type ?? "screen"}\n${activity.summary}` },
       { body: { step: "check" } },
     );
   }
@@ -95,7 +95,6 @@ export function PromptComposer() {
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
-      <header className="px-5 py-4 text-sm font-medium">Activity</header>
       {messages.length === 0 ? (
         <main className="flex flex-1 flex-col items-center justify-center px-4 pb-16">
           <div className="w-full max-w-2xl">
